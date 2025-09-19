@@ -91,12 +91,17 @@ for user_dir in user_dirs: # Iterate through all user files
 # -----------------------------
 cron_line = (f"0 2 * * * /usr/bin/python3 '{os.path.abspath(__file__)}' >> "
              f"/var/log/ssh_key_cleanup_cron.log 2>&1\n")
+
+# run before cron job is added so we can prevent duplicate entries, which would cause the script
+# to run multiple times at the same scheduled time
 result = subprocess.run(["crontab", "-l"], capture_output=True, text=True)
 current_cron = result.stdout if result.returncode == 0 else ""
 
+#if cron job is empty, then add cron job into job list
 if cron_line not in current_cron:
     new_cron = current_cron + cron_line
     subprocess.run(["crontab", "-"], input=new_cron, text=True)
     print("Cron job registered for daily execution at 2:00 AM")
+
 
 
