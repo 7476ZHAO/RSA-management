@@ -25,7 +25,7 @@ now = datetime.now()
 # Helper: get all user home dirs
 # -----------------------------
 user_dirs = []
-for p in pwd.getpwall():   # pwd.getpwall() returns a list, where each element is a struct_passwd object, including user information.
+for p in pwd.getpwall():   # pwd.getpwall() returns a list of accounts information on server, where each element is a struct_passwd object, including user information.
     # skip system users with no shell
     if p.pw_shell in ("/bin/false", "/usr/sbin/nologin", ""):
         continue
@@ -33,43 +33,40 @@ for p in pwd.getpwall():   # pwd.getpwall() returns a list, where each element i
         user_dirs.append(p.pw_dir)
 
 # -----------------------------
-# Main cleaning loop
+# Main cleaning loop(nested loop)
 # -----------------------------
-for user_dir in user_dirs: # Iterate through all user files
-    key_file = os.path.join(user_dir, ".ssh", "authorized_keys") # get complete path of file that include public key
+for user_dir in user_dirs: # Iterate through each user's home directory
+    key_file = os.path.join(user_dir, ".ssh", "authorized_keys") # get complete path of file that includes public key
     if not os.path.exists(key_file): # in case that some user don't have file of .ssh/authorized_keys
-        continue
+        continue   #Skip the current iteration and move on to the next user's home directory
 
     lock_path = key_file + ".lock" #Create a lock file path for the authorized_keys file to prevent
                                 # multiple processes from modifying the same file simultaneously.
     with FileLock(lock_path):
-        # Backup with timestamp
-        timestamp = datetime.now().strftime("%Y%m%d%H%M%S") #format datetime into a string
-        backup_file = f"{key_file}.bak.{timestamp}" # assign name of back file
-        shutil.copy2(key_file, backup_file) # copy from key_file to backup_file
-
         # Read all lines
         with open(key_file, "r") as f:
-            lines = f.readlines()
-
+            lines = f.readlines()  #Read all lines of the file and return them as a list,
+                                    #Each element is a line from the file (including the newline character \n at the end).
         new_lines = [] # used to store unexpired key and other information in the key_file
         for line in lines:
             stripped = line.strip()
 
             # Keep comments and empty lines
-            if stripped.startswith("#") or not stripped:
+            if stripped.startswith("#") or not stripped: # "not stripped" means this line is a blank line
                 new_lines.append(line)
-                continue
+                continue  #Skip the current iteration and move on to the next user's home directory
 
             # Check expiry-time="YYYY-MM-DD"
             if 'expiry-time="' in stripped:
                 try:
+                    # Extract the date string and parse it into a datetime object using a specific format.
                     start = stripped.index('expiry-time="') + len('expiry-time="')
                     end = stripped.index('"', start)
                     expiry_str = stripped[start:end]
                     expiry_date = datetime.strptime(expiry_str, "%Y-%m-%d")
 
-                    if expiry_date < now: # if expired, no append to new_lines which means expired key is deleted
+                    # if expired, no append to new_lines which means expired key is deleted
+                    if expiry_date < now:
                         print(f"Expired key removed for {user_dir}: {stripped}", file=sys.stdout)
                         with open(log_file, "a") as log: #adding expired key information to log_file
                             log.write(f"{datetime.now()} - Expired key removed for {user_dir}: {stripped}\n")
@@ -80,11 +77,11 @@ for user_dir in user_dirs: # Iterate through all user files
             else:
                 new_lines.append(line)
 
-        # Atomic write
+        # Atomic write,"tmp_fd" is file descriptor, "tmp_path" is the full path of the temporary file
         tmp_fd, tmp_path = tempfile.mkstemp(dir=os.path.dirname(key_file)) # create a temp file that has same path as key_file
         with os.fdopen(tmp_fd, 'w') as tmp_file:
             tmp_file.writelines(new_lines) # write new_lines into temp file
-        shutil.move(tmp_path, key_file) # replace key_file with tmp_path (atomic)
+        shutil.move(tmp_path, key_file) # # Atomically replace key_file with tmp_path; cleaning is finished
 
 # -----------------------------
 # Register cron job
@@ -102,6 +99,7 @@ if cron_line not in current_cron:
     new_cron = current_cron + cron_line
     subprocess.run(["crontab", "-"], input=new_cron, text=True)
     print("Cron job registered for daily execution at 2:00 AM")
+
 
 
 
