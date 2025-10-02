@@ -2,7 +2,6 @@
 import os
 import sys
 import argparse
-import getpass
 from datetime import datetime, timedelta
 import pwd
 from filelock import FileLock
@@ -17,7 +16,7 @@ import re
 home_root = "/home"  # Home directories root (on Linux, usually /home)
 additional_users = ["/root"]  # For root user, we also check /root
 log_file = "/var/log/ssh_key_cleanup.log"  # record information of all expired key
-DEFAULT_EXPIRY = "365d"  # default expiry: today + 365 days
+DEFAULT_EXPIRY = "2h"  # default expiry: today + 2 hrs
 
 
 # -----------------------------
@@ -74,16 +73,14 @@ def get_user_dirs():
 
 
 # -----------------------------
-# INIT: add expiry-time to keys that do not have it
+# INIT: add expiry comment to keys that do not have it
 # -----------------------------
-def init_keys(expiry_str=DEFAULT_EXPIRY, force_current=False, users=None):
+def init_keys(expiry_str=DEFAULT_EXPIRY, users=None):
     """
-    Add expiry-time to keys that do not have it.
+    Add expiry comment to keys that do not have it.
     expiry_str: string like "2d5h30m" or ISO format "YYYY-MM-DDTHH:MM"
-    force_current: whether to force processing the current user
     users: list of user directories (optional). If None, process all users.
     """
-    current_user = getpass.getuser()
     expiry_date = parse_expiry(expiry_str)
     if not expiry_date:
         print(f"[ERROR] Invalid expiry format: {expiry_str}")
@@ -93,11 +90,6 @@ def init_keys(expiry_str=DEFAULT_EXPIRY, force_current=False, users=None):
     user_dirs = users if users else get_user_dirs()
 
     for user_dir in user_dirs:
-        user_name = os.path.basename(user_dir)
-        if user_name == current_user and not force_current:
-            print(f"[SKIP] Skipping current user during init: {current_user}")
-            continue
-
         key_file = os.path.join(user_dir, ".ssh", "authorized_keys")  # get complete path of file that includes public key
         if not os.path.exists(key_file):  # in case that some user don't have file of .ssh/authorized_keys
             continue
@@ -110,9 +102,9 @@ def init_keys(expiry_str=DEFAULT_EXPIRY, force_current=False, users=None):
                 if not stripped or stripped.startswith("#"):  # "not stripped" means this line is a blank line
                     new_lines.append(line)
                     continue
-                # If no expiry-time is present, add one
-                if "expiry-time=" not in stripped:
-                    line = f'expiry-time="{expiry_str_fmt}" {line}'
+                # If no expiry comment is present, add one at the end of the line
+                if "# expiry=" not in stripped:
+                    line = line.rstrip("\n") + f' # expiry={expiry_str_fmt}\n'
                     print(f"[INIT] Added expiry to key in {user_dir}, expires at {expiry_str_fmt}")
                 new_lines.append(line)
 
@@ -126,18 +118,10 @@ def init_keys(expiry_str=DEFAULT_EXPIRY, force_current=False, users=None):
 # -----------------------------
 # CLEANUP: remove expired keys
 # -----------------------------
-def process_key_file(user_dir, force_current=False):
+def process_key_file(user_dir):
     """
     Cleanup expired keys in a single authorized_keys file.
-    force_current: whether to force processing the current user
     """
-    current_user = getpass.getuser()
-    user_name = os.path.basename(user_dir)
-
-    if user_name == current_user and not force_current:
-        print(f"[SKIP] Skipping current user during cleanup: {current_user}")
-        return
-
     key_file = os.path.join(user_dir, ".ssh", "authorized_keys")  # get complete path of file that includes public key
     if not os.path.exists(key_file):  # in case that some user don't have file of .ssh/authorized_keys
         return
@@ -145,8 +129,7 @@ def process_key_file(user_dir, force_current=False):
     lock_path = key_file + ".lock"  # Create a lock file path for the authorized_keys file to prevent race condition
     with FileLock(lock_path):
         with open(key_file, "r") as f:
-            lines = f.readlines()  # Read all lines of the file and return them as a list,
-                                   # Each element is a line from the file (including the newline character \n at the end).
+            lines = f.readlines()  # Read all lines of the file and return them as a list
 
         new_lines = []  # used to store unexpired key and other information in the key_file
         now = datetime.now()
@@ -158,13 +141,10 @@ def process_key_file(user_dir, force_current=False):
                 new_lines.append(line)
                 continue
 
-            # Check expiry-time="YYYY-MM-DD" or "YYYY-MM-DDTHH:MM"
-            if 'expiry-time="' in stripped:
+            # Check "# expiry=YYYY-MM-DD" or "# expiry=YYYY-MM-DDTHH:MM" in comment
+            if "# expiry=" in stripped:
                 try:
-                    # Extract the date string and parse it into a datetime object using a specific format.
-                    start = stripped.index('expiry-time="') + len('expiry-time="')
-                    end = stripped.index('"', start)
-                    expiry_str = stripped[start:end]
+                    expiry_str = stripped.split("# expiry=")[-1].strip()
                     expiry_date = parse_expiry(expiry_str)
 
                     # if expired, do not append to new_lines which means expired key is deleted
@@ -189,9 +169,9 @@ def process_key_file(user_dir, force_current=False):
 # -----------------------------
 def register_cron():
     """
-    Register a cron job that runs cleanup daily at 2:00 AM.
+    Register a cron job that runs cleanup every 2 minutes.
     """
-    cron_line = (f"0 2 * * * /usr/bin/python3 '{os.path.abspath(__file__)}' cleanup >> "
+    cron_line = (f"*/2 * * * * /usr/bin/python3 '{os.path.abspath(__file__)}' cleanup >> "
                  f"/var/log/ssh_key_cleanup_cron.log 2>&1\n")
 
     # run before cron job is added so we can prevent duplicate entries,
@@ -203,7 +183,7 @@ def register_cron():
     if cron_line not in current_cron:
         new_cron = current_cron + cron_line
         subprocess.run(["crontab", "-"], input=new_cron, text=True)
-        print("Cron job registered for daily execution at 2:00 AM")
+        print("Cron job registered for execution every 2 minutes")
 
 
 # -----------------------------
@@ -213,53 +193,37 @@ def main():
     """
     Main entry point.
     Supports:
-    - init: add expiry-time to all keys
+    - init: add expiry comment to all keys
     - cleanup: remove expired keys
-    - register-cron: add daily cron job for cleanup
+    - register-cron: add cron job for cleanup
     """
-    current_user = getpass.getuser()
-
-    parser = argparse.ArgumentParser(description="Manage SSH authorized_keys with expiry-time")
+    parser = argparse.ArgumentParser(description="Manage SSH authorized_keys with expiry comment")
     parser.add_argument("mode", choices=["init", "cleanup", "register-cron"], help="Mode of operation")
     parser.add_argument("--expiry", default=DEFAULT_EXPIRY,
                         help="Expiry duration (e.g. 2d5h30m10s or 2025-12-31T23:59)")
     parser.add_argument("--user", help="Specify a single username to operate on (default: all users)")
     args = parser.parse_args()
 
-    force_current = False
-
     if args.user:
         user_dir = os.path.join(home_root, args.user) if args.user != "root" else "/root"
         if not os.path.exists(user_dir):
             print(f"[ERROR] User {args.user} does not exist or has no home directory")
             sys.exit(1)
-        if args.user == current_user:
-            ans = input(f"Do you also want to process the current user '{current_user}'? (y/N): ").strip().lower()
-            if ans == "y":
-                force_current = True
-            else:
-                print(f"[SKIP] Skipping current user: {current_user}")
-                sys.exit(0)
 
         if args.mode == "init":
-            init_keys(expiry_str=args.expiry, force_current=force_current, users=[user_dir])
+            init_keys(expiry_str=args.expiry, users=[user_dir])
         elif args.mode == "cleanup":
-            process_key_file(user_dir, force_current=force_current)
+            process_key_file(user_dir)
         elif args.mode == "register-cron":
             register_cron()
         return
 
     # Handle all users
-    if args.mode in ("init", "cleanup"):
-        ans = input(f"Do you also want to process the current user '{current_user}'? (y/N): ").strip().lower()
-        if ans == "y":
-            force_current = True
-
     if args.mode == "init":
-        init_keys(expiry_str=args.expiry, force_current=force_current)
+        init_keys(expiry_str=args.expiry)
     elif args.mode == "cleanup":
         for user_dir in get_user_dirs():  # Iterate through each user's home directory
-            process_key_file(user_dir, force_current=force_current)
+            process_key_file(user_dir)
     elif args.mode == "register-cron":
         register_cron()
     else:
