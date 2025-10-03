@@ -16,7 +16,7 @@ import re
 home_root = "/home"  # Home directories root (on Linux, usually /home)
 additional_users = ["/root"]  # For root user, we also check /root
 log_file = "/var/log/ssh_key_cleanup.log"  # record information of all expired key
-DEFAULT_EXPIRY = "2h"  # default expiry: today + 2 hrs
+DEFAULT_EXPIRY = "2h"  # default expiry: today + 2 hours
 
 
 # -----------------------------
@@ -130,6 +130,9 @@ def process_key_file(user_dir):
     """
     Cleanup expired keys in a single authorized_keys file.
     """
+    username = os.path.basename(user_dir)
+    print(f"[CLEANUP] {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} - Checking user: {username}")
+
     key_file = os.path.join(user_dir, ".ssh", "authorized_keys")  # get complete path of file that includes public key
     if not os.path.exists(key_file):  # in case that some user don't have file of .ssh/authorized_keys
         return
@@ -188,9 +191,8 @@ def register_cron():
     """
     Register a cron job that runs cleanup every 2 minutes.
     """
-    cron_line = (f"*/2 * * * * (echo '=== $(date \"+%Y-%m-%d %H:%M:%S\") ==='; "
-             f"/usr/bin/python3 '{os.path.abspath(__file__)}' cleanup) >> "
-             f"/var/log/ssh_key_cleanup_cron.log 2>&1\n")
+    cron_line = (f"*/2 * * * * /usr/bin/python3 '{os.path.abspath(__file__)}' cleanup >> "
+                 f"/var/log/ssh_key_cleanup_cron.log 2>&1\n")
 
     # run before cron job is added so we can prevent duplicate entries,
     # which would cause the script to run multiple times at the same scheduled time
@@ -250,4 +252,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
