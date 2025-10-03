@@ -77,7 +77,7 @@ def get_user_dirs():
 # -----------------------------
 def init_keys(expiry_str=DEFAULT_EXPIRY, users=None):
     """
-    Add expiry comment to keys that do not have it.
+    Add expiry JSON to keys that do not have it.
     expiry_str: string like "2d5h30m" or ISO format "YYYY-MM-DDTHH:MM"
     users: list of user directories (optional). If None, process all users.
     """
@@ -102,17 +102,25 @@ def init_keys(expiry_str=DEFAULT_EXPIRY, users=None):
                 if not stripped or stripped.startswith("#"):  # "not stripped" means this line is a blank line
                     new_lines.append(line)
                     continue
-                # If no expiry comment is present, add one at the end of the line
-                if "# expiry=" not in stripped:
-                    line = line.rstrip("\n") + f' # expiry={expiry_str_fmt}\n'
+                # If no expiry JSON is present, add one at the end of the line
+                if '{"expiry":"' not in stripped:
+                    line = line.rstrip("\n") + f' {{"expiry":"{expiry_str_fmt}"}}\n'
                     print(f"[INIT] Added expiry to key in {user_dir}, expires at {expiry_str_fmt}")
                 new_lines.append(line)
+
+        # Save original ownership and permissions
+        st = os.stat(key_file)
+        uid, gid, mode = st.st_uid, st.st_gid, st.st_mode
 
         # Atomic write to replace the authorized_keys safely
         tmp_fd, tmp_path = tempfile.mkstemp(dir=os.path.dirname(key_file))
         with os.fdopen(tmp_fd, "w") as tmp:
             tmp.writelines(new_lines)
         shutil.move(tmp_path, key_file)
+
+        # Restore original ownership and permissions
+        os.chown(key_file, uid, gid)
+        os.chmod(key_file, mode)
 
 
 # -----------------------------
@@ -141,10 +149,11 @@ def process_key_file(user_dir):
                 new_lines.append(line)
                 continue
 
-            # Check "# expiry=YYYY-MM-DD" or "# expiry=YYYY-MM-DDTHH:MM" in comment
-            if "# expiry=" in stripped:
+            # Check for expiry JSON {"expiry":"..."}
+            expiry_match = re.search(r'{"expiry":"([^"]+)"}', stripped)
+            if expiry_match:
                 try:
-                    expiry_str = stripped.split("# expiry=")[-1].strip()
+                    expiry_str = expiry_match.group(1)
                     expiry_date = parse_expiry(expiry_str)
 
                     # if expired, do not append to new_lines which means expired key is deleted
@@ -157,11 +166,19 @@ def process_key_file(user_dir):
                     pass
             new_lines.append(line)
 
+        # Save original ownership and permissions
+        st = os.stat(key_file)
+        uid, gid, mode = st.st_uid, st.st_gid, st.st_mode
+
         # Atomic write,"tmp_fd" is file descriptor, "tmp_path" is the full path of the temporary file
         tmp_fd, tmp_path = tempfile.mkstemp(dir=os.path.dirname(key_file))  # create a temp file that has same path as key_file
         with os.fdopen(tmp_fd, 'w') as tmp_file:
             tmp_file.writelines(new_lines)  # write new_lines into temp file
         shutil.move(tmp_path, key_file)  # Atomically replace key_file with tmp_path; cleaning is finished
+
+        # Restore original ownership and permissions
+        os.chown(key_file, uid, gid)
+        os.chmod(key_file, mode)
 
 
 # -----------------------------
