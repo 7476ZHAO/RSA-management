@@ -188,8 +188,9 @@ def register_cron():
     """
     Register a cron job that runs cleanup every 2 minutes.
     """
-    cron_line = (f"*/2 * * * * /usr/bin/python3 '{os.path.abspath(__file__)}' cleanup >> "
-                 f"/var/log/ssh_key_cleanup_cron.log 2>&1\n")
+    cron_line = (f"*/2 * * * * (echo '=== $(date \"+%Y-%m-%d %H:%M:%S\") ==='; "
+             f"/usr/bin/python3 '{os.path.abspath(__file__)}' cleanup) >> "
+             f"/var/log/ssh_key_cleanup_cron.log 2>&1\n")
 
     # run before cron job is added so we can prevent duplicate entries,
     # which would cause the script to run multiple times at the same scheduled time
@@ -249,3 +250,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
