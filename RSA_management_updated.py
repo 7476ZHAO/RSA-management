@@ -116,7 +116,7 @@ def init_keys(expiry_str=DEFAULT_EXPIRY, users=None, force=False):
                 else:
                     # No expiry, add new expiry JSON
                     line = line.rstrip("\n") + f' {{"expiry":"{expiry_str_fmt}"}}\n'
-                    print(f"[INIT] Added expiry to key in {user_dir}, expires at {expiry_str_fmt}")
+                    print(f"[INIT]{datetime.now().strftime('%Y-%m-%d %H:%M:%S')} Added expiry to key in {user_dir}, expires at {expiry_str_fmt}")
                 new_lines.append(line)
 
         # Save original ownership and permissions
@@ -174,7 +174,7 @@ def process_key_file(user_dir):
                     if expiry_date and expiry_date < now:
                         print(f"[CLEANUP] Removed expired key from {user_dir}: {stripped}", file=sys.stdout)
                         with open(log_file, "a") as log:  # adding expired key information to log_file
-                            log.write(f"{datetime.now()} - Expired key removed for {user_dir}: {stripped}\n")
+                            log.write(f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')} - Expired key removed for {user_dir}: {stripped}\n")
                         continue
                 except Exception:  # including ValueError、IndexError、KeyError、TypeError etc.
                     pass
@@ -255,6 +255,7 @@ def main():
             sys.exit(1)
         user_dirs = [user_dir]
     else:
+
         user_dirs = get_user_dirs()
 
     # Execute based on mode
