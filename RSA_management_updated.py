@@ -1,4 +1,9 @@
 #!/usr/bin/env python3
+"""
+Author: Jiali Zhao, Kenneth R Uebel, Saad Arshad Pervez Mughal
+Date: 2025-10-03
+Description: Manage SSH authorized_keys with expiry comment.
+"""
 import os
 import sys
 import argparse
@@ -16,7 +21,7 @@ import re
 home_root = "/home"  # Home directories root (on Linux, usually /home)
 additional_users = ["/root"]  # For root user, we also check /root
 log_file = "/var/log/ssh_key_cleanup.log"  # record information of all expired key
-DEFAULT_EXPIRY = "2h"  # default expiry: today + 2 hours
+DEFAULT_EXPIRY = "2025-12-12T00:00"  # default expiry: 2026-01-01T00:00
 
 
 # -----------------------------
@@ -75,7 +80,7 @@ def get_user_dirs():
 # -----------------------------
 # INIT: add expiry comment to keys that do not have it
 # -----------------------------
-def init_keys(expiry_str=DEFAULT_EXPIRY, users=None):
+def init_keys(expiry_str=DEFAULT_EXPIRY, users=None, force=False):
     """
     Add expiry JSON to keys that do not have it.
     expiry_str: string like "2d5h30m" or ISO format "YYYY-MM-DDTHH:MM"
@@ -102,8 +107,14 @@ def init_keys(expiry_str=DEFAULT_EXPIRY, users=None):
                 if not stripped or stripped.startswith("#"):  # "not stripped" means this line is a blank line
                     new_lines.append(line)
                     continue
-                # If no expiry JSON is present, add one at the end of the line
-                if '{"expiry":"' not in stripped:
+                # Check if line already has expiry info
+                if '{"expiry":"' in stripped:
+                    if force:
+                        # Replace the existing expiry with new one
+                        line = re.sub(r'{"expiry":"[^"]+"}', f'{{"expiry":"{expiry_str_fmt}"}}', line)
+                        print(f"[UPDATE] Replaced expiry in {user_dir}, new expiry at {expiry_str_fmt}")
+                else:
+                    # No expiry, add new expiry JSON
                     line = line.rstrip("\n") + f' {{"expiry":"{expiry_str_fmt}"}}\n'
                     print(f"[INIT] Added expiry to key in {user_dir}, expires at {expiry_str_fmt}")
                 new_lines.append(line)
@@ -189,10 +200,15 @@ def process_key_file(user_dir):
 # -----------------------------
 def register_cron():
     """
-    Register a cron job that runs cleanup every 2 minutes.
+    Register two cron jobs:
+    - cleanup every 2 minutes
+    - init every 1 minutes
     """
-    cron_line = (f"*/2 * * * * /usr/bin/python3 '{os.path.abspath(__file__)}' cleanup >> "
-                 f"/var/log/ssh_key_cleanup_cron.log 2>&1\n")
+    script_path = os.path.abspath(__file__)
+    cron_lines = [
+        f"*/2 * * * * /usr/bin/python3 '{script_path}' cleanup >> /var/log/ssh_key_cleanup_cron.log 2>&1\n",
+        f"*/1 * * * * /usr/bin/python3 '{script_path}' init >> /var/log/ssh_key_init_cron.log 2>&1\n"
+    ]
 
     # run before cron job is added so we can prevent duplicate entries,
     # which would cause the script to run multiple times at the same scheduled time
@@ -200,10 +216,16 @@ def register_cron():
     current_cron = result.stdout if result.returncode == 0 else ""
 
     # if cron job is empty, then add cron job into job list
-    if cron_line not in current_cron:
-        new_cron = current_cron + cron_line
+    new_cron = current_cron + "\n"
+    for line in cron_lines:
+        if line not in current_cron:
+            new_cron += line
+
+    if new_cron != current_cron:
         subprocess.run(["crontab", "-"], input=new_cron, text=True)
-        print("Cron job registered for execution every 2 minutes")
+        print("Cron jobs registered: cleanup (every 2 min) and init (every 1 min)")
+    else:
+        print("Cron jobs already exist, nothing to update.")
 
 
 # -----------------------------
@@ -222,32 +244,30 @@ def main():
     parser.add_argument("--expiry", default=DEFAULT_EXPIRY,
                         help="Expiry duration (e.g. 2d5h30m10s or 2025-12-31T23:59)")
     parser.add_argument("--user", help="Specify a single username to operate on (default: all users)")
+    parser.add_argument("--force", action="store_true", help="Force update expiry for all keys")
     args = parser.parse_args()
 
+    # Determine target user directories
     if args.user:
         user_dir = os.path.join(home_root, args.user) if args.user != "root" else "/root"
         if not os.path.exists(user_dir):
             print(f"[ERROR] User {args.user} does not exist or has no home directory")
             sys.exit(1)
+        user_dirs = [user_dir]
+    else:
+        user_dirs = get_user_dirs()
 
-        if args.mode == "init":
-            init_keys(expiry_str=args.expiry, users=[user_dir])
-        elif args.mode == "cleanup":
-            process_key_file(user_dir)
-        elif args.mode == "register-cron":
-            register_cron()
-        return
-
-    # Handle all users
+    # Execute based on mode
     if args.mode == "init":
-        init_keys(expiry_str=args.expiry)
+        init_keys(expiry_str=args.expiry, users=user_dirs, force=args.force)
     elif args.mode == "cleanup":
-        for user_dir in get_user_dirs():  # Iterate through each user's home directory
+        for user_dir in user_dirs:
             process_key_file(user_dir)
     elif args.mode == "register-cron":
         register_cron()
     else:
-        print("Unknown mode. Use 'init' or 'cleanup' or 'register-cron'.")
+        print("Unknown mode. Use 'init', 'cleanup', or 'register-cron'.")
+
 
 
 if __name__ == "__main__":
