@@ -21,8 +21,13 @@ import re
 home_root = "/home"  # Home directories root (on Linux, usually /home)
 additional_users = ["/root"]  # For root user, we also check /root
 log_file = "/var/log/ssh_key_cleanup.log"  # record information of all expired key
-DEFAULT_EXPIRY = "2025-12-12T00:00"  # default expiry: 2026-01-01T00:00
+DEFAULT_EXPIRY = "2025-12-12T23:59"  # default expiry: 2025-12-12T23:59
 
+# -----------------------------
+# Helper: current time
+# -----------------------------
+def ts():
+    return datetime.now().strftime('%Y-%m-%d %H:%M:%S')
 
 # -----------------------------
 # Helper: parse expiry string into datetime
@@ -86,6 +91,9 @@ def init_keys(expiry_str=DEFAULT_EXPIRY, users=None, force=False):
     expiry_str: string like "2d5h30m" or ISO format "YYYY-MM-DDTHH:MM"
     users: list of user directories (optional). If None, process all users.
     """
+    with open(log_file, "a") as log:
+        log.write(f"[{ts()}] INIT started\n")
+
     expiry_date = parse_expiry(expiry_str)
     if not expiry_date:
         print(f"[ERROR] Invalid expiry format: {expiry_str}")
@@ -116,7 +124,7 @@ def init_keys(expiry_str=DEFAULT_EXPIRY, users=None, force=False):
                 else:
                     # No expiry, add new expiry JSON
                     line = line.rstrip("\n") + f' {{"expiry":"{expiry_str_fmt}"}}\n'
-                    print(f"[INIT]{datetime.now().strftime('%Y-%m-%d %H:%M:%S')} Added expiry to key in {user_dir}, expires at {expiry_str_fmt}")
+                    print(f"[INIT]{ts()} Added expiry to key in {user_dir}, expires at {expiry_str_fmt}")
                 new_lines.append(line)
 
         # Save original ownership and permissions
@@ -132,6 +140,8 @@ def init_keys(expiry_str=DEFAULT_EXPIRY, users=None, force=False):
         # Restore original ownership and permissions
         os.chown(key_file, uid, gid)
         os.chmod(key_file, mode)
+    with open(log_file, "a") as log:
+        log.write(f"[{ts()}] INIT completed\n")
 
 
 # -----------------------------
@@ -142,7 +152,7 @@ def process_key_file(user_dir):
     Cleanup expired keys in a single authorized_keys file.
     """
     username = os.path.basename(user_dir)
-    print(f"[CLEANUP] {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} - Checking user: {username}")
+    print(f"[CLEANUP] {ts()} - Checking user: {username}")
 
     key_file = os.path.join(user_dir, ".ssh", "authorized_keys")  # get complete path of file that includes public key
     if not os.path.exists(key_file):  # in case that some user don't have file of .ssh/authorized_keys
@@ -154,7 +164,7 @@ def process_key_file(user_dir):
             lines = f.readlines()  # Read all lines of the file and return them as a list
 
         new_lines = []  # used to store unexpired key and other information in the key_file
-        now = datetime.now()
+        now =datetime.now()
 
         for line in lines:
             stripped = line.strip()
@@ -174,7 +184,7 @@ def process_key_file(user_dir):
                     if expiry_date and expiry_date < now:
                         print(f"[CLEANUP] Removed expired key from {user_dir}: {stripped}", file=sys.stdout)
                         with open(log_file, "a") as log:  # adding expired key information to log_file
-                            log.write(f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')} - Expired key removed for {user_dir}: {stripped}\n")
+                            log.write(f"{ts()} - Expired key removed for {user_dir}: {stripped}\n")
                         continue
                 except Exception:  # including ValueError、IndexError、KeyError、TypeError etc.
                     pass
@@ -201,13 +211,13 @@ def process_key_file(user_dir):
 def register_cron():
     """
     Register two cron jobs:
-    - cleanup every 2 minutes
-    - init every 1 minutes
+    - cleanup every Friday at 23:59
+    - init every Monday at 00:00
     """
     script_path = os.path.abspath(__file__)
     cron_lines = [
-        f"*/2 * * * * /usr/bin/python3 '{script_path}' cleanup >> /var/log/ssh_key_cleanup_cron.log 2>&1\n",
-        f"*/1 * * * * /usr/bin/python3 '{script_path}' init >> /var/log/ssh_key_init_cron.log 2>&1\n"
+        f"59 23 * * 5 /usr/bin/python3 '{script_path}' cleanup >> /var/log/ssh_key_cleanup_cron.log 2>&1\n",
+        f"0 0 * * 1 /usr/bin/python3 '{script_path}' init >> /var/log/ssh_key_init_cron.log 2>&1\n"
     ]
 
     # run before cron job is added so we can prevent duplicate entries,
@@ -223,7 +233,7 @@ def register_cron():
 
     if new_cron != current_cron:
         subprocess.run(["crontab", "-"], input=new_cron, text=True)
-        print("Cron jobs registered: cleanup (every 2 min) and init (every 1 min)")
+        print("Cron jobs registered: cleanup (every Friday at 23:59) and init (every Monday at 00:00)")
     else:
         print("Cron jobs already exist, nothing to update.")
 
