@@ -132,11 +132,13 @@ Default expiry date is set to:
 You can change this by modifying the DEFAULT_EXPIRY variable in the script.
 
 ## Contributors
-| Name                  | Role               |
-| --------------------- | ------------------ |
-| Jiali Zhao (Lee)      | Developer          |
-| Kenneth R. Uebel      | Project Supervisor |
-| Saad A. Pervez Mughal | Collaborator       |
+
+| Name | Role | Contribution |
+|------|------|---------------|
+| Jiali Zhao | Developer / Primary Author /Project Supervisor | Designed and implemented most of the program logic, automation flow, and testing. |
+| Kenneth R. Uebel | Collaborator | Assisted in testing and documentation review. |
+| Saad A. Pervez Mughal | Collaborator | Assisted in testing and documentation review. |
+
 
 ## System Requirements
 -Python 3.8+
