@@ -20,3 +20,7 @@ jobs:
 
       - name: Run script
         run: python3 RSA_management_updated.py --help
+
+      - name: Show network source
+        run: pip install -v filelock
+
