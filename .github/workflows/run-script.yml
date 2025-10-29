@@ -16,4 +16,4 @@ jobs:
           python-version: '3.11'
 
       - name: Run script
-        run: python3 ssh_key_manager.py --help
+        run: python3 RSA_management_updated.py --help
