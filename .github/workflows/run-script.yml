@@ -1,26 +1,31 @@
-name: Run SSH Key Manager
+name: Run SSH Key Manager (With Azure)
 
 on:
-  workflow_dispatch:   # 手动运行
+  workflow_dispatch:
 
 jobs:
   run-script:
     runs-on: ubuntu-latest
+
     steps:
+      # 1️⃣ 拉取代码
       - name: Checkout code
         uses: actions/checkout@v4
 
+      # 2️⃣ 设置 Python 环境
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
 
-      - name: Install dependencies
-        run: pip install -v filelock
+      # 3️⃣ 执行系统更新（会访问 Azure 仓库）
+      - name: apt-get update (includes Azure sources)
+        run: sudo apt-get update -y
 
+      # 4️⃣ 安装 filelock（默认镜像可能经过 Azure CDN）
+      - name: Install dependencies
+        run: pip install filelock -v
+
+      # 5️⃣ 运行脚本
       - name: Run script
         run: python3 RSA_management_updated.py --help
-
-      - name: Show network source
-        run: pip install -v filelock
-
