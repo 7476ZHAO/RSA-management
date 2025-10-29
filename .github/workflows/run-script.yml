@@ -1,0 +1,19 @@
+name: Run SSH Key Manager
+
+on:
+  workflow_dispatch:   # 允许手动运行
+
+jobs:
+  run-script:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Run script
+        run: python3 ssh_key_manager.py --help
