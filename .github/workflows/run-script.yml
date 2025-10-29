@@ -1,45 +1,26 @@
-name: Run SSH Key Manager (No Azure)
+name: SSH Key Manager
 
 on:
-  workflow_dispatch:   # 手动运行
+  workflow_dispatch:
+  push:
+    branches: [ main ]
 
 jobs:
   run-script:
     runs-on: ubuntu-latest
-
     steps:
-      # 1️⃣ 拉取代码
-      - name: Checkout code
+      - name: Checkout repository
         uses: actions/checkout@v4
 
-      # 2️⃣ 设置 Python 环境
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
+      - name: Verify Python version
+        run: python3 --version
 
-      # 3️⃣ 删除 Azure 仓库（防止访问 packages.microsoft.com）
-      - name: Remove Azure repositories
+      - name: Run SSH Key Manager (init)
         run: |
-          echo "Before:"
-          ls /etc/apt/sources.list.d || true
-          sudo rm -f /etc/apt/sources.list.d/azure* || true
-          echo "After:"
-          ls /etc/apt/sources.list.d || true
+          echo "Running ssh_key_manager.py init ..."
+          python3 ssh_key_manager.py init
 
-      # 4️⃣ 安全执行 apt-get update（只访问 Ubuntu 官方源）
-      - name: Safe apt update
-        run: sudo apt-get update -y
-
-      # 5️⃣ 从 PyPI 官方源安装依赖（禁止 Azure 镜像）
-      - name: Install dependencies (PyPI only)
+      - name: Run SSH Key Manager (cleanup)
         run: |
-          pip install --no-cache-dir --index-url https://pypi.org/simple filelock -v
-
-      # 6️⃣ 打印当前 pip 源（用于验证）
-      - name: Verify pip source
-        run: pip config list
-
-      # 7️⃣ 运行你的 Python 程序
-      - name: Run script
-        run: python3 RSA_management_updated.py --help
+          echo "Running ssh_key_manager.py cleanup ..."
+          python3 RSA_management_updated.py cleanup
