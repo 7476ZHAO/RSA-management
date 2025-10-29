@@ -20,7 +20,7 @@ import re
 # -----------------------------
 home_root = "/home"  # Home directories root (on Linux, usually /home)
 additional_users = ["/root"]  # For root user, we also check /root
-log_file = "/var/log/ssh_key_cleanup.log"  # record information of all expired key
+log_file = os.path.join(os.getcwd(), "ssh_key_cleanup.log")  # record information of all expired key
 DEFAULT_EXPIRY = "2025-12-12T23:59"  # default expiry: 2025-12-12T23:59
 
 # -----------------------------
