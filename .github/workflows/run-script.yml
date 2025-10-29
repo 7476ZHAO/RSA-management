@@ -16,7 +16,7 @@ jobs:
           python-version: '3.11'
 
       - name: Install dependencies
-        run: pip install filelock
+        run: pip install -v filelock
 
       - name: Run script
         run: python3 RSA_management_updated.py --help
