@@ -18,7 +18,7 @@ jobs:
       - name: Run SSH Key Manager (init)
         run: |
           echo "Running ssh_key_manager.py init ..."
-          python3 ssh_key_manager.py init
+          python3 RSA_management_updated.py init
 
       - name: Run SSH Key Manager (cleanup)
         run: |
