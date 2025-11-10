@@ -30,7 +30,10 @@ This script is developed as part of the Avatar Open-Source Project (3C-SCSU) at 
     - Every Monday 00:00 → add expiry to new keys
 
 - **Thread-Safe File Access**
-  - Uses Python’s `filelock.FileLock` to prevent race conditions during writes.
+  - Uses Python’s built-in `fcntl` module to implement file locking, ensuring that
+    concurrent processes do not modify the `authorized_keys` file at the same time.
+  - This prevents race conditions during read/write operations and guarantees
+    data integrity across multiple automation tasks.
 
 - **Comprehensive Logging**
   - Records all actions in `/var/log/ssh_key_cleanup.log`.
