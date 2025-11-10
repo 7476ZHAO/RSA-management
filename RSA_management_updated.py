@@ -1,8 +1,22 @@
 #!/usr/bin/env python3
 """
-Author: Jiali Zhao, Kenneth R Uebel, Saad Arshad Pervez Mughal
+Author: Jiali Zhao, Kenneth R. Uebel, Saad Arshad Pervez Mughal
 Date: 2025-10-03
-Description: Manage SSH authorized_keys with expiry comment.
+Version: 1.0
+License: MIT
+Python Version: 3.11+
+
+Description:
+    Automates SSH key lifecycle management by parsing, updating, and maintaining
+    authorized_keys files with embedded expiry comments. Designed for cloud
+    environments and system automation tasks.
+
+Key Features:
+    - Automatically add expiry dates to newly added SSH keys
+    - Detect and remove expired keys based on expiry timestamps
+    - Preserve and validate active keys to ensure uninterrupted access
+    - Log key operations for debugging and auditing
+    - Integrate easily with cron jobs for scheduled key rotation
 """
 import os
 import sys
@@ -288,3 +302,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
